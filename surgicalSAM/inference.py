@@ -53,8 +53,10 @@ dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4)
 
 print("======> Load SAM" )
 sam_checkpoint = "../ckp/sam/sam_vit_h_4b8939.pth"
-model_type = "vit_h_no_image_encoder"
-sam_prompt_encoder, sam_decoder = sam_model_registry[model_type](checkpoint=sam_checkpoint)
+model_type = "vit_h" # vit_h_no_image_encoder
+sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
+sam_prompt_encoder = sam.prompt_encoder
+sam_decoder = sam.mask_decoder 
 sam_prompt_encoder.cuda()
 sam_decoder.cuda()
 

@@ -26,23 +26,31 @@ class Prototype_Prompt_Encoder(nn.Module):
         self.pn_cls_embeddings = nn.ModuleList(pn_cls_embeddings)
                 
     def forward(self, feat, prototypes, cls_ids):
-  
+        # batch_size = feat.size(0)
+        # spatial_size = feat.size(1)  # 4096 (64x64)
+
+        # [29, 256, 1] 
         cls_prompts = prototypes.unsqueeze(-1)
+        
+        # [1, 1, 256, 1]
         cls_prompts = torch.stack([cls_prompts for _ in range(feat.size(0))], dim=0)
 
-        
+        # [1, 29, 4096, 256]
         feat = torch.stack([feat for _ in range(cls_prompts.size(1))], dim=1)
 
         # compute similarity matrix 
-        sim = torch.matmul(feat, cls_prompts)
-        
+        sim = torch.matmul(
+            feat, # [1, 29, 4096, 256]
+            cls_prompts # [1, 29, 256, 1]
+        )
+
         # compute class-activated feature
         feat =  feat + feat*sim
 
         feat_sparse = feat.clone()
         
         # compute dense embeddings
-        one_hot = torch.nn.functional.one_hot(cls_ids-1,7) 
+        one_hot = torch.nn.functional.one_hot(cls_ids-1,29) # QL modify one_hot = torch.nn.functional.one_hot(cls_ids-1,7)
         feat = feat[one_hot ==1]
         feat = rearrange(feat,'b (h w) c -> b c h w', h=64, w=64)
         dense_embeddings = self.dense_fc_2(self.relu(self.dense_fc_1(feat)))
@@ -50,7 +58,7 @@ class Prototype_Prompt_Encoder(nn.Module):
         # compute sparse embeddings
         feat_sparse = rearrange(feat_sparse,'b num_cls hw c -> (b num_cls) hw c')
         sparse_embeddings = self.sparse_fc_2(self.relu(self.sparse_fc_1(feat_sparse)))
-        sparse_embeddings = rearrange(sparse_embeddings,'(b num_cls) n c -> b num_cls n c', num_cls=7)
+        sparse_embeddings = rearrange(sparse_embeddings,'(b num_cls) n c -> b num_cls n c', num_cls=29) # QL modify sparse_embeddings = rearrange(sparse_embeddings,'(b num_cls) n c -> b num_cls n c', num_cls=7)
         
         pos_embed = self.pn_cls_embeddings[1].weight.unsqueeze(0).unsqueeze(0) * one_hot.unsqueeze(-1).unsqueeze(-1)
         neg_embed = self.pn_cls_embeddings[0].weight.unsqueeze(0).unsqueeze(0) * (1-one_hot).unsqueeze(-1).unsqueeze(-1)
@@ -66,7 +74,8 @@ class Prototype_Prompt_Encoder(nn.Module):
 
 
 class Learnable_Prototypes(nn.Module):
-    def __init__(self, num_classes=7 , feat_dim=256):
+    def __init__(self, num_classes=29 , feat_dim=256):
+        # QL modify __init__(self, num_classes=7 , feat_dim=256):
         super(Learnable_Prototypes, self).__init__()
         self.class_embeddings = nn.Embedding(num_classes, feat_dim)
         

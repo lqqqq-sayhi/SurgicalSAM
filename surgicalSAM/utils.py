@@ -24,6 +24,14 @@ def create_binary_masks(binary_masks, preds, preds_quality, mask_names, thr):
       
         seq_name = mask_name.split("/")[0]
         frame_name = osp.basename(mask_name).split("_")[0]
+
+        # QL modify "保存pred_mask为图片"
+        # from PIL import Image
+        # save_dir = r"./pred_masks"
+        # pred_mask_img = (pred_mask.numpy() * 255).astype(np.uint8)
+        # pred_mask_img = np.squeeze(pred_mask_img)
+        # pred_mask_img_path = os.path.join(save_dir, f"{seq_name}_{frame_name}_pred_mask.png")
+        # Image.fromarray(pred_mask_img).save(pred_mask_img_path)
         
         if seq_name not in binary_masks.keys():
             binary_masks[seq_name] = dict()
@@ -64,9 +72,12 @@ def create_endovis_masks(binary_masks, H, W):
             binary_masks_list = sorted(binary_masks_list, key=lambda x: x["mask_quality"])
            
             for binary_mask in binary_masks_list:
+                # '10/C2-00000_class15.png'
                 mask_name  = binary_mask["mask_name"]
                 predicted_label = int(re.search(r"class(\d+)", mask_name).group(1))
+                # mask.shape = (1024, 1280)
                 mask = binary_mask["mask"].numpy()
+                # endovis_mask.shape = (1004, 1920)
                 endovis_mask[mask==1] = predicted_label
 
             endovis_mask = endovis_mask.astype(int)
@@ -91,7 +102,7 @@ def eval_endovis(endovis_masks, gt_endovis_masks):
     """
 
     endovis_results = dict()
-    num_classes = 7
+    num_classes = 29 # QL modify num_classes = 7
     
     all_im_iou_acc = []
     all_im_iou_acc_challenge = []
@@ -100,14 +111,16 @@ def eval_endovis(endovis_masks, gt_endovis_masks):
     
     for file_name, prediction in endovis_masks.items():
        
-        full_mask = gt_endovis_masks[file_name]
+        full_mask = gt_endovis_masks[file_name.replace("/","\\")]
+        # QL modify full_mask = gt_endovis_masks[file_name]
         
         im_iou = []
         im_iou_challenge = []
         target = full_mask.numpy()
         gt_classes = np.unique(target)
         gt_classes.sort()
-        gt_classes = gt_classes[gt_classes > 0] 
+        gt_classes = gt_classes[(gt_classes > 0) & (gt_classes != 29)] # 排除背景类和排除label 29（不参与此次任务）       
+        # QL modify gt_classes = gt_classes[gt_classes > 0] 
         if np.sum(prediction) == 0:
             if target.sum() > 0: 
                 all_im_iou_acc.append(0)
@@ -118,19 +131,24 @@ def eval_endovis(endovis_masks, gt_endovis_masks):
 
         gt_classes = torch.unique(full_mask)
         # loop through all classes from 1 to num_classes 
-        for class_id in range(1, num_classes + 1): 
-
+        for class_id in gt_classes: # QL modify range(1, num_classes + 1)
+            class_id = class_id.item()  # QL modify 转为Python整数
             current_pred = (prediction == class_id).astype(np.float64)
             current_target = (full_mask.numpy() == class_id).astype(np.float64)
 
             if current_pred.astype(np.float64).sum() != 0 or current_target.astype(np.float64).sum() != 0:
+                # compute_mask_IU_endovis(masks, target)
                 i, u = compute_mask_IU_endovis(current_pred, current_target)     
-                im_iou.append(i/u)
+                if u == 0:
+                    iou = 0.0
+                else:
+                    iou = i / u
+                im_iou.append(iou)
                 cum_I += i
                 cum_U += u
-                class_ious[class_id].append(i/u)
+                class_ious[class_id].append(iou)
                 if class_id in gt_classes:
-                    im_iou_challenge.append(i/u)
+                    im_iou_challenge.append(iou)
         
         if len(im_iou) > 0:
             all_im_iou_acc.append(np.mean(im_iou))
@@ -142,9 +160,10 @@ def eval_endovis(endovis_masks, gt_endovis_masks):
     mean_im_iou = np.mean(all_im_iou_acc)
     mean_im_iou_challenge = np.mean(all_im_iou_acc_challenge)
 
-    final_class_im_iou = torch.zeros(9)
+    final_class_im_iou = torch.zeros(num_classes)
     cIoU_per_class = []
-    for c in range(1, num_classes + 1):
+    for c in gt_classes: # QL modify range(1, num_classes + 1)
+        c = c.item()
         final_class_im_iou[c-1] = torch.tensor(class_ious[c]).float().mean()
         cIoU_per_class.append(round((final_class_im_iou[c-1]*100).item(), 3))
         
@@ -164,6 +183,7 @@ def eval_endovis(endovis_masks, gt_endovis_masks):
 def compute_mask_IU_endovis(masks, target):
     """compute iou used for evaluation
     """
+    # target.shape = (1004, 1920) masks.shape = (1004, 1920)
     assert target.shape[-2:] == masks.shape[-2:]
     temp = masks * target
     intersection = temp.sum()

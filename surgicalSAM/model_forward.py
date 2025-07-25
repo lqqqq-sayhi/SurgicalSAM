@@ -29,7 +29,9 @@ def model_forward_function(prototype_prompt_encoder,
         
     sam_feats = rearrange(sam_feats, 'b h w c -> b (h w) c')
 
-    
+    # print(f"model_forward_function_prototypes: {prototypes.shape}, mean: {prototypes.mean()}")
+    # model_forward_function_prototypes: torch.Size([28, 256]), mean: 0.006689900532364845
+
     dense_embeddings, sparse_embeddings = prototype_prompt_encoder(sam_feats, prototypes, cls_ids)
 
     pred = []
@@ -120,15 +122,34 @@ def postprocess_masks(masks, input_size, original_size):
     #     mode="bilinear",
     #     align_corners=False,
     # )
-    # 没有预处理图像，注释掉两行直接上采样到原始尺寸（跳过中间处理）
-    masks = masks[..., : input_size[0], : input_size[1]]
+    
+    # masks = masks[..., : input_size[0], : input_size[1]]
     # masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
+    masks = F.interpolate(
+        masks,
+        size=(1024, 1024),  # 注意：PyTorch 尺寸格式为 (height, width)
+        mode="nearest",      # 必须使用 nearest 保持类别标签
+        align_corners=None   # 对于 nearest 模式应设置为 None
+    )
+
+    # scale = 1024 / max(original_size)
+    # new_h, new_w = int(original_size[0] * scale), int(original_size[1] * scale)
+    # pad_top = (1024 - new_h) // 2
+    # pad_left = (1024 - new_w) // 2
+    # cropped = masks[..., pad_top:pad_top+new_h, pad_left:pad_left+new_w]
+    # scale: 0.5333333333333333
+    # new_h: 535, new_w: 1024
+    # pad_top: 244, pad_left: 0
+    # 244:779
+    # 0:1024
+
+    masks = masks[..., : input_size[0], : input_size[1]]
     masks = F.interpolate(
         masks,
         size=original_size,  # 注意：PyTorch 尺寸格式为 (height, width)
         mode="nearest",      # 必须使用 nearest 保持类别标签
         align_corners=None   # 对于 nearest 模式应设置为 None
     )
-    
+
     return masks
 

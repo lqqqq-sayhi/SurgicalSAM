@@ -74,16 +74,32 @@ def create_endovis_masks(binary_masks, H, W):
             for binary_mask in binary_masks_list:
                 # '10/C2-00000_class15.png'
                 mask_name  = binary_mask["mask_name"]
+
                 predicted_label = int(re.search(r"class(\d+)", mask_name).group(1))
+
+                # print(f"Predicted label: {predicted_label}")
+
                 # mask.shape = (1024, 1280)
                 mask = binary_mask["mask"].numpy()
+
+                # print(f"mask.sum(): {mask.sum()}, {np.unique(mask)}")
+
                 # endovis_mask.shape = (1004, 1920)
                 endovis_mask[mask==1] = predicted_label
 
+                # print(f"endovis_mask1: {endovis_mask.sum()/mask.sum()}, {np.unique(endovis_mask)}")
+
+            # print(f"endovis_mask shape af loop: {endovis_mask.shape}, {np.unique(endovis_mask)}")
+
             endovis_mask = endovis_mask.astype(int)
+            
+            # print(f"endovis_mask shape2: {endovis_mask.shape}, {np.unique(endovis_mask)}")
 
             endovis_masks[f"{seq}/{frame}.png"] = endovis_mask
+
+            # print(f"{seq}/{frame}.png_endovis_masks3: {np.unique(endovis_masks['10/C2-00000.png'])}")
     
+    # print(f"endovis_masks4: {np.unique(endovis_masks['10/C2-00000.png'])}")
     return endovis_masks
 
 
@@ -102,7 +118,7 @@ def eval_endovis(endovis_masks, gt_endovis_masks):
     """
 
     endovis_results = dict()
-    num_classes = 29 # QL modify num_classes = 7
+    num_classes = 28 # QL modify num_classes = 7
     
     all_im_iou_acc = []
     all_im_iou_acc_challenge = []
@@ -111,8 +127,7 @@ def eval_endovis(endovis_masks, gt_endovis_masks):
     
     for file_name, prediction in endovis_masks.items():
        
-        full_mask = gt_endovis_masks[file_name.replace("/","\\")]
-        # QL modify full_mask = gt_endovis_masks[file_name]
+        full_mask = gt_endovis_masks[file_name]
         
         im_iou = []
         im_iou_challenge = []
@@ -130,6 +145,7 @@ def eval_endovis(endovis_masks, gt_endovis_masks):
             continue
 
         gt_classes = torch.unique(full_mask)
+        gt_classes = gt_classes[(gt_classes > 0) & (gt_classes != 29)] # 排除背景类和排除label 29（不参与此次任务）       
         # loop through all classes from 1 to num_classes 
         for class_id in gt_classes: # QL modify range(1, num_classes + 1)
             class_id = class_id.item()  # QL modify 转为Python整数
